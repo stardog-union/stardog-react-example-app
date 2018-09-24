@@ -181,6 +181,16 @@ class App extends Component {
     });
   }
 
+  // Again, no validation for this example app.
+  deleteItem(itemId) {
+    // Delete all triples where the subject has the given id.
+    const deleteQuery = `delete { ?s ?p ?o } where {
+    ?s :id ${itemId} ;
+       ?p ?o .
+  }`;
+    query.execute(conn, dbName, deleteQuery).then(() => this.refreshData());
+  }
+
   render() {
     const { dataState, data } = this.state;
     const isLoading = dataState === TableDataAvailabilityStatus.LOADING;
@@ -221,7 +231,12 @@ class App extends Component {
                         return <TableCell key={selector}>{text}</TableCell>;
                       })}
                       <TableCell key={-1} style={styles.actionCell}>
-                        <Button color="secondary">Delete</Button>
+                        <Button
+                          color="secondary"
+                          onClick={() => this.deleteItem(bindingForTable.id)}
+                        >
+                          Delete
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
