@@ -135,6 +135,52 @@ class App extends Component {
       });
   }
 
+  // NOTE: Does no validation and assumes certain inputs; not production-ready!
+  addItem() {
+    // Get the input elements and create a map from their names to their
+    // values.
+    const inputs = document.querySelectorAll("input[name]");
+    const inputsArray = Array.from(inputs);
+    const valueMap = inputsArray.reduce(
+      (accumulator, input) => ({
+        ...accumulator,
+        [input.name]: input.value
+      }),
+      {}
+    );
+    // Auto-generate a subject local name by removing all whitespace and
+    // lowercasing the `name` input. This is "good enough" for our purposes.
+    const subject = valueMap.name
+      .trim()
+      .split(/\s/)
+      .join("")
+      .toLowerCase();
+    // Convert comma-separated movie values into an array of movies.
+    const movies = valueMap.movie
+      .split(",")
+      .map(
+        mov =>
+          `:${mov
+            .split(/\s/)
+            .join("")
+            .trim()}`
+      )
+      .join(", ");
+    const updateTriples = `:${subject} a :${valueMap.kind} ;
+    :id ${valueMap.id} ;
+    :name '${valueMap.name}' ;
+    :appearsIn ${movies} ;
+    ${valueMap.homePlanet ? ":homePlanet :" + valueMap.homePlanet : ""} .
+  `;
+    const updateQuery = `insert data { ${updateTriples} }`;
+
+    // Add data to DB and clear the inputs when this succeeds.
+    query.execute(conn, dbName, updateQuery).then(() => {
+      inputsArray.forEach(input => (input.value = ""));
+      this.refreshData();
+    });
+  }
+
   render() {
     const { dataState, data } = this.state;
     const isLoading = dataState === TableDataAvailabilityStatus.LOADING;
@@ -190,7 +236,9 @@ class App extends Component {
                         </TableCell>
                       ))}
                       <TableCell style={styles.actionCell}>
-                        <Button color="primary">Add</Button>
+                        <Button color="primary" onClick={() => this.addItem()}>
+                          Add
+                        </Button>
                       </TableCell>
                     </TableRow>
                   )
