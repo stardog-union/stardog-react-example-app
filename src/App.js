@@ -17,12 +17,16 @@ import {
   conn,
   dbName
 } from "./helpers/constants";
+import Button from "@material-ui/core/Button";
 
 // Let's not take _quite_ the entire browser screen.
 const styles = {
   appInnerContainer: {
     width: "90%",
     margin: "0 auto"
+  },
+  actionCell: {
+    textAlign: "center"
   }
 };
 
@@ -150,26 +154,46 @@ class App extends Component {
                 {columnData.map(({ label }) => (
                   <TableCell key={label}>{label}</TableCell>
                 ))}
+                <TableCell style={styles.actionCell}>Action</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {isLoading ? (
                 <CircularProgress />
               ) : (
-                data.map(bindingForTable => (
-                  <TableRow key={bindingForTable.id}>
-                    {columnSelectors.map(selector => {
-                      const bindingValue =
-                        bindingForTable[
-                          selector === "movie" ? "movies" : selector
-                        ];
-                      const text = Array.isArray(bindingValue)
-                        ? bindingValue.join(", ")
-                        : bindingValue;
-                      return <TableCell key={selector}>{text}</TableCell>;
-                    })}
-                  </TableRow>
-                ))
+                data
+                  .map(bindingForTable => (
+                    <TableRow key={bindingForTable.id}>
+                      {columnSelectors.map(selector => {
+                        const bindingValue =
+                          bindingForTable[
+                            selector === "movie" ? "movies" : selector
+                          ];
+                        const text = Array.isArray(bindingValue)
+                          ? bindingValue.join(", ")
+                          : bindingValue;
+                        return <TableCell key={selector}>{text}</TableCell>;
+                      })}
+                      <TableCell key={-1} style={styles.actionCell}>
+                        <Button color="secondary">Delete</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                  .concat(
+                    <TableRow key={-1}>
+                      {columnData.map(({ label, selector }) => (
+                        <TableCell key={selector}>
+                          <label>
+                            {label}
+                            <input name={selector} />
+                          </label>
+                        </TableCell>
+                      ))}
+                      <TableCell style={styles.actionCell}>
+                        <Button color="primary">Add</Button>
+                      </TableCell>
+                    </TableRow>
+                  )
               )}
             </TableBody>
           </Table>
