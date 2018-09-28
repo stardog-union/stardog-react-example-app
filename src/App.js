@@ -23,7 +23,10 @@ import Button from "@material-ui/core/Button";
 const styles = {
   appInnerContainer: {
     width: "90%",
-    margin: "0 auto"
+    margin: "20px auto 0"
+  },
+  paper: {
+    overflowX: 'auto',
   },
   actionCell: {
     textAlign: "center"
@@ -167,28 +170,104 @@ class App extends Component {
       )
       .join(", ");
     const updateTriples = `:${subject} a :${valueMap.kind} ;
-    :id ${valueMap.id} ;
-    :name '${valueMap.name}' ;
-    :appearsIn ${movies} ;
-    ${valueMap.homePlanet ? ":homePlanet :" + valueMap.homePlanet : ""} .
-  `;
+      :id ${valueMap.id} ;
+      :name "${valueMap.name}" ;
+      :appearsIn ${movies} ;
+      ${valueMap.homePlanet ? ":homePlanet :" + valueMap.homePlanet : ""} .
+    `;
     const updateQuery = `insert data { ${updateTriples} }`;
 
     // Add data to DB and clear the inputs when this succeeds.
     query.execute(conn, dbName, updateQuery).then(() => {
       inputsArray.forEach(input => (input.value = ""));
+      // A full refresh of the data isn't really optimal here, but it serves our
+      // purposes for this tutorial.
       this.refreshData();
     });
   }
 
-  // Again, no validation for this example app.
+  // Again, no validation or optimization for this example app.
   deleteItem(itemId) {
     // Delete all triples where the subject has the given id.
     const deleteQuery = `delete { ?s ?p ?o } where {
-    ?s :id ${itemId} ;
-       ?p ?o .
-  }`;
+      ?s :id ${itemId} ;
+        ?p ?o .
+      }`;
     query.execute(conn, dbName, deleteQuery).then(() => this.refreshData());
+  }
+
+  // Movie editing is a special case compared with other edits handled below.
+  // This is not optimal or truly safe by ANY means, but it conveys the basics.
+  handleMovieEdit(innerText, currentItem) {
+    const currentValue = currentItem.movies;
+    const newMoviesArray = innerText
+      .split(",")
+      .map(val => val.trim())
+      .filter(val => val);
+
+    // If the new value is the same as the one in state, do nothing.
+    // In production, we'd probably want to be more careful here.
+    if (
+      currentValue.length === newMoviesArray.length &&
+      currentValue.every((movie, index) => movie === newMoviesArray[index])
+    ) {
+      return;
+    }
+
+    const itemId = currentItem.id;
+    const insertableMovies = newMoviesArray
+      .map(
+        movie =>
+          `:${movie
+            .split(/\s/)
+            .join("")
+            .trim()}`
+      )
+      .join(", ");
+
+    // Do the update. In SPARQL, this is done by a delete + insert.
+    query
+      .execute(
+        conn,
+        dbName,
+        `delete { ?s :appearsIn ?o }
+        insert { ?s :appearsIn ${insertableMovies} }
+        where {
+          ?s :id ${itemId} ;
+            :appearsIn ?o
+        }`
+      )
+      .then(() => this.refreshData());
+  }
+
+  // Again, this is not optimal or truly safe by ANY means, but it conveys the basics.
+  handleEdit(innerText, dataIndex, valueSelector) {
+    const currentItem = this.state.data[dataIndex];
+    const isMovieEdit = valueSelector === "movie";
+
+    if (isMovieEdit) {
+      this.handleMovieEdit(innerText, currentItem);
+      return;
+    }
+
+    const currentValue = currentItem[valueSelector];
+
+    // If the new value is the same as the one in state, do nothing.
+    if (currentValue === innerText) {
+      return;
+    }
+
+    const itemId = currentItem.id;
+    const predicate = valueSelector === "kind" ? "a" : `:${valueSelector}`;
+    const deleteClause = `delete { ?s ${predicate} ?o }`;
+    const whereClause = `where { ?s :id ${itemId} ; ${predicate} ?o }`;
+    const insertObject =
+      valueSelector === "name" ? `"${innerText}"` : `:${innerText}`;
+    const insertClause = `insert { ?s ${predicate} ${insertObject} }`;
+
+    // Do the update. In SPARQL, this is done by a delete + insert.
+    const fullQuery = `${deleteClause}\n${insertClause}\n${whereClause}`;
+    query.execute(conn, dbName, fullQuery).then(() => this.refreshData());
   }
 
   render() {
@@ -198,7 +277,7 @@ class App extends Component {
     return (
       <div className="App" style={styles.appInnerContainer}>
         <CssBaseline />
-        <Paper>
+        <Paper style={styles.paper}>
           <Toolbar>
             <Typography variant="title">
               <i>Star Wars</i> with Stardog
@@ -218,17 +297,33 @@ class App extends Component {
                 <CircularProgress />
               ) : (
                 data
-                  .map(bindingForTable => (
+                  .map((bindingForTable, index) => (
                     <TableRow key={bindingForTable.id}>
                       {columnSelectors.map(selector => {
                         const bindingValue =
                           bindingForTable[
                             selector === "movie" ? "movies" : selector
                           ];
+                        // NOTE: In a production app, we would probably want to do this formatting elsewhere.
                         const text = Array.isArray(bindingValue)
                           ? bindingValue.join(", ")
                           : bindingValue;
-                        return <TableCell key={selector}>{text}</TableCell>;
+                        return (
+                          <TableCell
+                            key={selector}
+                            onBlur={evt =>
+                              this.handleEdit(
+                                evt.currentTarget.innerText.trim(),
+                                index,
+                                selector
+                              )
+                            }
+                            contentEditable={selector !== "id"}
+                            suppressContentEditableWarning
+                          >
+                            {text}
+                          </TableCell>
+                        );
                       })}
                       <TableCell key={-1} style={styles.actionCell}>
                         <Button
