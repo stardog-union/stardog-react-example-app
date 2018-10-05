@@ -26,7 +26,7 @@ const styles = {
     margin: "20px auto 0"
   },
   paper: {
-    overflowX: 'auto',
+    overflowX: "auto"
   },
   actionCell: {
     textAlign: "center"
@@ -40,7 +40,6 @@ const readQuery = `SELECT ?id ?name ?homePlanet ?kind ?movie {
     :appearsIn ?movie .
   ?kind rdfs:subClassOf :Character .
   OPTIONAL { ?subject :homePlanet ?homePlanet } .
-  FILTER (?kind != :Character)
 }`;
 
 class App extends Component {
@@ -57,29 +56,25 @@ class App extends Component {
   }
 
   refreshData() {
-    this.setState(
-      {
-        dataState: TableDataAvailabilityStatus.LOADING
-      },
-      () => {
-        query.execute(conn, dbName, readQuery).then(res => {
-          if (!res.ok) {
-            this.setState({
-              dataState: TableDataAvailabilityStatus.FAILED
-            });
-            return;
-          }
-
-          const { bindings } = res.body.results;
-          const bindingsForTable = this.getBindingsFormattedForTable(bindings);
-
-          this.setState({
-            dataState: TableDataAvailabilityStatus.LOADED,
-            data: bindingsForTable
-          });
+    this.setState({
+      dataState: TableDataAvailabilityStatus.LOADING
+    });
+    query.execute(conn, dbName, readQuery).then(res => {
+      if (!res.ok) {
+        this.setState({
+          dataState: TableDataAvailabilityStatus.FAILED
         });
+        return;
       }
-    );
+
+      const { bindings } = res.body.results;
+      const bindingsForTable = this.getBindingsFormattedForTable(bindings);
+
+      this.setState({
+        dataState: TableDataAvailabilityStatus.LOADED,
+        data: bindingsForTable
+      });
+    });
   }
 
   // Our SPARQL query gets a new "row" for each character for each movie in
@@ -96,9 +91,7 @@ class App extends Component {
     // returned for a single character.
     const bindingsById = bindings.reduce((groupedBindings, binding) => {
       const { value: id } = binding.id;
-      groupedBindings[id] = groupedBindings[id]
-        ? groupedBindings[id].concat(binding)
-        : [binding];
+      groupedBindings[id] = groupedBindings[id] ? groupedBindings[id].concat(binding) : [binding];
       return groupedBindings;
     }, {});
 
@@ -112,17 +105,13 @@ class App extends Component {
         // For each `id`, merge the bindings together as described above.
         return bindingsById[id].reduce(
           (bindingForTable, binding) => {
-            const bindingValues = Object.keys(binding).reduce(
-              (valueBinding, key) => {
-                const { type, value } = binding[key];
-                valueBinding[key] =
-                  type !== "uri"
-                    ? value
-                    : value.slice(value.lastIndexOf("/") + 1); // data cleanup
-                return valueBinding;
-              },
-              {}
-            );
+            // Quick cleanup to remove IRI data that we don't want to display:
+            const bindingValues = Object.keys(binding).reduce((valueBinding, key) => {
+              const { type, value } = binding[key];
+              valueBinding[key] = type !== "uri" ? value : value.slice(value.lastIndexOf("/") + 1); // data cleanup
+              return valueBinding;
+            }, {});
+            // Aggregate movies on the `movies` property, deleting `movie`:
             const movies = bindingValues.movie
               ? bindingForTable.movies.concat(bindingValues.movie)
               : bindingForTable.movies;
@@ -196,7 +185,8 @@ class App extends Component {
     query.execute(conn, dbName, deleteQuery).then(() => this.refreshData());
   }
 
-  // Movie editing is a special case compared with other edits handled below.
+  // Movie editing is a special case compared with other edits handled below,
+  // because it can involve multiple values.
   // This is not optimal or truly safe by ANY means, but it conveys the basics.
   handleMovieEdit(innerText, currentItem) {
     const currentValue = currentItem.movies;
@@ -257,12 +247,13 @@ class App extends Component {
       return;
     }
 
+    // Format the SPARQL query depending on the type of value. This query is a
+    // delete/insert query (https://www.w3.org/TR/sparql11-update/#deleteInsert).
     const itemId = currentItem.id;
     const predicate = valueSelector === "kind" ? "a" : `:${valueSelector}`;
     const deleteClause = `delete { ?s ${predicate} ?o }`;
     const whereClause = `where { ?s :id ${itemId} ; ${predicate} ?o }`;
-    const insertObject =
-      valueSelector === "name" ? `"${innerText}"` : `:${innerText}`;
+    const insertObject = valueSelector === "name" ? `"${innerText}"` : `:${innerText}`;
     const insertClause = `insert { ?s ${predicate} ${insertObject} }`;
 
     // Do the update. In SPARQL, this is done by a delete + insert.
@@ -270,9 +261,39 @@ class App extends Component {
     query.execute(conn, dbName, fullQuery).then(() => this.refreshData());
   }
 
+  getBindingValueForSelector(selector, binding) {
+    const bindingValue = binding[selector === "movie" ? "movies" : selector];
+    // NOTE: In a production app, we would probably want to do this formatting elsewhere.
+    return Array.isArray(bindingValue) ? bindingValue.join(", ") : bindingValue;
+  }
+
+  renderRowForBinding(binding, index) {
+    return (
+      // Use every "selector" to extract table cell data from each binding.
+      <TableRow key={binding.id}>
+        {columnSelectors.map(selector => (
+          <TableCell
+            key={selector}
+            onBlur={evt => this.handleEdit(evt.currentTarget.innerText.trim(), index, selector)}
+            contentEditable={selector !== "id"}
+            suppressContentEditableWarning
+          >
+            {this.getBindingValueForSelector(selector, binding)}
+          </TableCell>
+        ))}
+        <TableCell key={-1} style={styles.actionCell}>
+          <Button color="secondary" onClick={() => this.deleteItem(binding.id)}>
+            Delete
+          </Button>
+        </TableCell>
+      </TableRow>
+    );
+  }
+
   render() {
     const { dataState, data } = this.state;
     const isLoading = dataState === TableDataAvailabilityStatus.LOADING;
+    const columnHeaders = columnData.map(({ label }) => <TableCell key={label}>{label}</TableCell>);
 
     return (
       <div className="App" style={styles.appInnerContainer}>
@@ -286,9 +307,7 @@ class App extends Component {
           <Table>
             <TableHead>
               <TableRow>
-                {columnData.map(({ label }) => (
-                  <TableCell key={label}>{label}</TableCell>
-                ))}
+                {columnHeaders}
                 <TableCell style={styles.actionCell}>Action</TableCell>
               </TableRow>
             </TableHead>
@@ -296,62 +315,26 @@ class App extends Component {
               {isLoading ? (
                 <CircularProgress />
               ) : (
-                data
-                  .map((bindingForTable, index) => (
-                    <TableRow key={bindingForTable.id}>
-                      {columnSelectors.map(selector => {
-                        const bindingValue =
-                          bindingForTable[
-                            selector === "movie" ? "movies" : selector
-                          ];
-                        // NOTE: In a production app, we would probably want to do this formatting elsewhere.
-                        const text = Array.isArray(bindingValue)
-                          ? bindingValue.join(", ")
-                          : bindingValue;
-                        return (
-                          <TableCell
-                            key={selector}
-                            onBlur={evt =>
-                              this.handleEdit(
-                                evt.currentTarget.innerText.trim(),
-                                index,
-                                selector
-                              )
-                            }
-                            contentEditable={selector !== "id"}
-                            suppressContentEditableWarning
-                          >
-                            {text}
-                          </TableCell>
-                        );
-                      })}
-                      <TableCell key={-1} style={styles.actionCell}>
-                        <Button
-                          color="secondary"
-                          onClick={() => this.deleteItem(bindingForTable.id)}
-                        >
-                          Delete
-                        </Button>
+                data.map((binding, index) => this.renderRowForBinding(binding, index)).concat(
+                  // Create an additional row for adding a new entry (by
+                  // iterating through our columnData and creating a table
+                  // cell for each column).
+                  <TableRow key={-1}>
+                    {columnData.map(({ label, selector }) => (
+                      <TableCell key={selector}>
+                        <label>
+                          {label}
+                          <input name={selector} />
+                        </label>
                       </TableCell>
-                    </TableRow>
-                  ))
-                  .concat(
-                    <TableRow key={-1}>
-                      {columnData.map(({ label, selector }) => (
-                        <TableCell key={selector}>
-                          <label>
-                            {label}
-                            <input name={selector} />
-                          </label>
-                        </TableCell>
-                      ))}
-                      <TableCell style={styles.actionCell}>
-                        <Button color="primary" onClick={() => this.addItem()}>
-                          Add
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  )
+                    ))}
+                    <TableCell style={styles.actionCell}>
+                      <Button color="primary" onClick={() => this.addItem()}>
+                        Add
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
               )}
             </TableBody>
           </Table>
