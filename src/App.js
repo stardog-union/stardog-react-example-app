@@ -28,6 +28,10 @@ const styles = {
   paper: {
     overflowX: "auto"
   },
+  spinner: {
+    margin: "20px auto",
+    display: "block"
+  },
   actionCell: {
     textAlign: "center"
   }
@@ -41,6 +45,8 @@ const readQuery = `SELECT ?id ?name ?homePlanet ?kind ?movie {
   ?kind rdfs:subClassOf :Character .
   OPTIONAL { ?subject :homePlanet ?homePlanet } .
 }`;
+
+const columnHeaders = columnData.map(({ label }) => <TableCell key={label}>{label}</TableCell>);
 
 class App extends Component {
   constructor(props) {
@@ -293,7 +299,6 @@ class App extends Component {
   render() {
     const { dataState, data } = this.state;
     const isLoading = dataState === TableDataAvailabilityStatus.LOADING;
-    const columnHeaders = columnData.map(({ label }) => <TableCell key={label}>{label}</TableCell>);
 
     return (
       <div className="App" style={styles.appInnerContainer}>
@@ -304,18 +309,18 @@ class App extends Component {
               <i>Star Wars</i> with Stardog
             </Typography>
           </Toolbar>
-          <Table>
-            <TableHead>
-              <TableRow>
-                {columnHeaders}
-                <TableCell style={styles.actionCell}>Action</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {isLoading ? (
-                <CircularProgress />
-              ) : (
-                data.map((binding, index) => this.renderRowForBinding(binding, index)).concat(
+          {isLoading ? (
+            <CircularProgress style={styles.spinner} />
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  {columnHeaders}
+                  <TableCell style={styles.actionCell}>Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data.map((binding, index) => this.renderRowForBinding(binding, index)).concat(
                   // Create an additional row for adding a new entry (by
                   // iterating through our columnData and creating a table
                   // cell for each column).
@@ -334,10 +339,10 @@ class App extends Component {
                       </Button>
                     </TableCell>
                   </TableRow>
-                )
-              )}
-            </TableBody>
-          </Table>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </Paper>
       </div>
     );
