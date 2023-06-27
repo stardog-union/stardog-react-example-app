@@ -15,10 +15,11 @@ const loadData = () => {
   console.log(`Creating ${dbName}...\n`);
 
   return db
-    .create(conn, dbName)
-    .then(wrapWithResCheck(() => query.execute(conn, dbName, insertQuery)))
-    .then(logSuccess)
-    .catch(logFailure);
+      .drop(conn, dbName) // Drop the db in case it already exists
+      .then(() => db.create(conn, dbName)) // Ignore response if it didn't exist
+      .then(wrapWithResCheck(() => query.execute(conn, dbName, insertQuery)))
+      .then(logSuccess)
+      .catch(logFailure);
 };
 
 loadData();
